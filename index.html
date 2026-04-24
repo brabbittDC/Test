@@ -1,0 +1,1041 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+<title>ALIGNMENT — Samurai Mobile v17</title>
+<style>
+  :root{
+    --cyan:#00ffdd;
+    --red:#ff334f;
+    --panel:rgba(4,16,24,.88);
+    --line:rgba(0,255,221,.5);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{
+    width:100%;height:100%;overflow:hidden;background:#03070b;color:var(--cyan);
+    font-family:"Courier New",monospace;user-select:none;-webkit-user-select:none;touch-action:none;
+  }
+  #stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#03070b}
+  #shell{width:100vw;height:100vh;display:flex;align-items:center;justify-content:center;padding:0}
+  #game{
+    position:relative;
+    aspect-ratio:9/16;
+    width:min(100vw, calc(100vh * 9 / 16));
+    height:min(100vh, calc(100vw * 16 / 9));
+    background:#000;
+    border:none;
+    border-radius:0;
+    overflow:hidden;
+    box-shadow:0 0 32px rgba(0,255,221,.14);
+    touch-action:none;
+    -webkit-touch-callout:none;
+    -webkit-user-select:none;
+    user-select:none;
+  }
+  #bg{
+    position:absolute;inset:0;background-image:url("assets/backgrounds/background_1.png");
+    background-size:cover;background-position:center 40%;z-index:0;
+  }
+  #bg::after{
+    content:"";position:absolute;inset:0;pointer-events:none;
+    background:
+      repeating-linear-gradient(0deg, rgba(0,0,0,0) 0 3px, rgba(0,0,0,.22) 3px 4px),
+      radial-gradient(circle at 50% 58%, rgba(0,255,221,.05), rgba(0,0,0,.22) 58%, rgba(0,0,0,.42));
+  }
+  #samurai{
+    position:absolute;left:50%;
+    bottom:-50px;
+    width:110%;
+    aspect-ratio:9/16;
+    transform:translateX(-50%);
+    background-size:contain;background-repeat:no-repeat;background-position:center bottom;
+    z-index:4;pointer-events:none;filter:none;
+    will-change:background-image,bottom,width,transform;
+  }
+  #flash{
+    position:absolute;inset:0;z-index:30;pointer-events:none;opacity:0;transition:opacity .08s;
+  }
+  #flash.cyan{background:radial-gradient(circle,rgba(0,255,221,.42),rgba(0,255,221,0) 70%);opacity:1}
+  #flash.red{background:radial-gradient(circle,rgba(255,51,79,.48),rgba(255,51,79,0) 70%);opacity:1}
+  #flash.white{background:rgba(255,255,255,.65);opacity:1}
+  #flash.hitred{background:radial-gradient(circle,rgba(255,30,50,.42) 0%,rgba(255,0,0,.72) 65%,rgba(90,0,0,.92) 100%);opacity:1}
+  #hud{position:absolute;top:0;left:0;right:0;padding:12px;z-index:20;pointer-events:none}
+  .bar-row{margin-bottom:9px}
+  .bar-label{font-size:9px;letter-spacing:2.5px;margin-bottom:3px;text-shadow:0 0 8px currentColor}
+  .bar{height:8px;border:1px solid currentColor;background:rgba(0,0,0,.62);box-shadow:0 0 8px currentColor;position:relative;overflow:hidden}
+  .fill{position:absolute;left:0;top:0;bottom:0;width:100%;background:currentColor;box-shadow:0 0 8px currentColor;transition:width .22s}
+  .player{color:var(--cyan)} .enemy{color:var(--red)}
+  #status{
+    position:absolute;left:8px;right:8px;top:75px;text-align:center;z-index:21;pointer-events:none;
+    font-size:10px;letter-spacing:3px;color:rgba(0,255,221,.82);text-shadow:0 0 8px rgba(0,255,221,.5);
+    min-height:16px;
+  }
+  #phase{
+    position:absolute;left:10px;bottom:9px;z-index:21;font-size:9px;letter-spacing:2px;color:rgba(0,255,221,.72);
+    pointer-events:none;text-shadow:0 0 6px rgba(0,255,221,.45);
+  }
+  #trail,#burst{position:absolute;inset:0;z-index:22;pointer-events:none}
+  #burst{z-index:23}
+  #overlay{
+    position:absolute;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;flex-direction:column;
+    background:rgba(0,0,0,.78);text-align:center;padding:22px;
+  }
+  #overlay.hidden{display:none}
+  #overlay h1{letter-spacing:8px;font-size:28px;margin-bottom:12px;text-shadow:0 0 18px var(--cyan)}
+  #overlay p{font-size:11px;line-height:1.8;letter-spacing:2px;opacity:.78;max-width:330px;margin-bottom:18px}
+  button{
+    background:rgba(0,10,18,.86);border:1px solid rgba(0,255,221,.6);border-radius:8px;color:#fff;
+    font-family:inherit;padding:10px 12px;cursor:pointer;box-shadow:0 0 12px rgba(0,255,221,.16);
+  }
+  button:hover{background:rgba(0,255,221,.15)}
+  @media (max-width:760px){#shell{padding:0} #game{width:100vw;height:100vh;max-width:none;max-height:none}}
+
+  #game{border-radius:0;border:none;max-height:none;height:100vh;width:100vw}
+    #controls{position:absolute;left:8px;right:8px;bottom:8px;z-index:80;max-height:38vh;background:rgba(3,8,14,.88)}
+    #controls.collapsed .panel-body{display:none}
+    #controls h2{cursor:pointer}
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="shell">
+    <div id="game">
+      <div id="bg"></div>
+      <div id="samurai"></div>
+      <canvas id="trail"></canvas>
+      <canvas id="burst"></canvas>
+      <div id="flash"></div>
+      <div id="hud">
+        <div class="bar-row player">
+          <div class="bar-label">CLAUDE // INTEGRITY</div>
+          <div class="bar"><div class="fill" id="playerHP"></div></div>
+        </div>
+        <div class="bar-row enemy">
+          <div class="bar-label">SENTINEL // SAMURAI</div>
+          <div class="bar"><div class="fill" id="enemyHP"></div></div>
+        </div>
+      </div>
+      <div id="status">READY</div>
+      <div id="phase">SWIPE LEFT / RIGHT / UP TO PARRY · SWIPE LEFT / RIGHT / DOWN TO COUNTER</div>
+      <div id="overlay">
+        <h1>ALIGNMENT</h1>
+        <p>SAMURAI COMBAT<br>Swipe to parry. Counter when the guard breaks.</p>
+        <button id="startBtn">DEPLOY</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const CFG = {
+  paths: {
+    enter: "assets/samurai/Samurai_enter/",
+    left: "assets/samurai/samurai_left/",
+    right: "assets/samurai/samurai_right/",
+    center: "assets/samurai/samurai_center/",
+    blocked: "assets/samurai/samurai_blocked/",
+    recover: "assets/samurai/samurai_recover_ready/"
+  },
+  files: {
+    enter: n => `samurai_${pad4(n)}.png`,
+    left: n => `samurai_left_${pad4(n)}.png`,
+    right: n => `samurai_right_${pad4(n)}.png`,
+    center: n => `samurai_center_${pad4(n)}.png`,
+    blocked: n => `samurai_blocked_${pad4(n)}.png`,
+    recover: n => `samurai_recover_ready_${pad4(n)}.png`
+  },
+  counts: { enter:101, left:29, right:31, center:31, blocked:15, recover:25 }
+};
+function pad4(n){ return String(n).padStart(4,"0"); }
+function frames(kind){
+  return Array.from({length:CFG.counts[kind]}, (_,i)=>CFG.paths[kind]+CFG.files[kind](i+1));
+}
+
+const F = {
+  enter: frames("enter"),
+  left: frames("left"),
+  right: frames("right"),
+  center: frames("center"),
+  blocked: frames("blocked"),
+  recover: frames("recover")
+};
+
+const $ = id => document.getElementById(id);
+const samurai = $("samurai"), game = $("game"), statusEl = $("status"), flashEl = $("flash");
+const trail = $("trail"), trailCtx = trail.getContext("2d");
+const burst = $("burst"), burstCtx = burst.getContext("2d");
+
+const SETTINGS = {
+  scale: 110,
+  feet: -50,
+  travel: 0,
+  enterSpeed: 80,
+  attackSpeed: 75,
+  sideWindow: 250,
+  centerWindow: 250,
+  counterWindow: 1000,
+  chainMin: 0,
+  chainMax: 3
+};
+
+const SIDE_TIMING = {
+  left: {
+    parryOpenAt: 13,
+    parryCloseAt: 20,
+    hitFrame: 20,
+    usedEnd: 20
+  },
+  right: {
+    parryOpenAt: 8,
+    parryCloseAt: 21,
+    hitFrame: 21,
+    usedEnd: 21
+  }
+};
+
+const State = {
+  title:"title", entering:"entering", ready:"ready", attacking:"attacking",
+  parry:"parry", committed:"committed", counter:"counter", resetting:"resetting",
+  paused:"paused", won:"won", lost:"lost"
+};
+
+let state = State.title;
+let running = false;
+let paused = false;
+let token = 0;
+let timers = [];
+let playerHP = 100, enemyHP = 100;
+let sideAttacksRemaining = 0;
+let requiredParry = null;
+let counterHits = 0;
+let currentAttackKind = null;
+const COUNTER_HITS_TO_KILL = 5;
+const COUNTER_DAMAGE = 100 / COUNTER_HITS_TO_KILL;
+let currentFrameKind = null;
+let currentFrameIndex = 0;
+let pointer = null;
+let path = [];
+let swipeStrokes = [];
+let parryConsumedThisTouch = false;
+let counterConsumedThisTouch = false;
+
+
+const GameAudio = {
+  enabled: true,
+  current: null,
+  music: null,
+  sfx: {},
+  sfxVolumeScale: 0.5,
+  paths: {
+    leftBlock: "assets/sounds/strike0.mp3",
+    rightBlock: "assets/sounds/strike1.mp3",
+    centerBlock: "assets/sounds/strike2.mp3",
+    attackLeft: "assets/sounds/swing1.mp3",
+    attackRight: "assets/sounds/swing4.mp3",
+    attackCenter: "assets/sounds/swing7.mp3",
+    counter: "assets/sounds/swing5.mp3",
+    activate: "assets/sounds/swing3.mp3",
+    danger: "assets/sounds/Danger2.mp3"
+  },
+  init(){
+    if (!this.music) {
+      this.music = new Audio(this.paths.danger);
+      this.music.loop = true;
+      this.music.volume = 0.075;
+      this.music.preload = "auto";
+    }
+
+    // Pre-create SFX elements during the start tap. This is more reliable on iOS
+    // than constructing a fresh Audio object deep inside combat timing callbacks.
+    for (const [key, src] of Object.entries(this.paths)) {
+      if (key === "danger") continue;
+      if (!this.sfx[key]) {
+        const a = new Audio(src);
+        a.preload = "auto";
+        a.volume = 0.5;
+        this.sfx[key] = a;
+        try { a.load(); } catch(e) {}
+      }
+    }
+  },
+  playMusic(){
+    if (!this.enabled) return;
+    this.init();
+    this.music.play().catch(()=>{});
+  },
+  stopMusic(){
+    if (!this.music) return;
+    try {
+      this.music.pause();
+      this.music.currentTime = 0;
+    } catch(e) {}
+  },
+  stopCurrent(){
+    if (!this.current) return;
+    try {
+      this.current.pause();
+      this.current.currentTime = 0;
+    } catch(e) {}
+    this.current = null;
+  },
+  playKey(key, volume=0.85){
+    if (!this.enabled) return;
+    this.init();
+    this.stopCurrent();
+    const a = this.sfx[key] || new Audio(this.paths[key]);
+    try {
+      a.pause();
+      a.currentTime = 0;
+      a.volume = Math.max(0, Math.min(1, volume * this.sfxVolumeScale));
+      this.current = a;
+      a.play().catch(()=>{});
+    } catch(e) {}
+  },
+  play(src, volume=0.85){
+    // Compatibility for any older direct-path calls.
+    if (!this.enabled) return;
+    this.stopCurrent();
+    const a = new Audio(src);
+    a.preload = "auto";
+    a.volume = Math.max(0, Math.min(1, volume * this.sfxVolumeScale));
+    this.current = a;
+    a.play().catch(()=>{});
+  },
+  attack(kind){
+    if (kind === "left") this.playKey("attackLeft", 0.78);
+    else if (kind === "right") this.playKey("attackRight", 0.78);
+    else this.playKey("attackCenter", 0.82);
+  },
+  block(kind){
+    if (kind === "left") this.playKey("leftBlock", 0.9);
+    else if (kind === "right") this.playKey("rightBlock", 0.9);
+    else this.playKey("centerBlock", 0.95);
+  },
+  counter(){
+    this.playKey("counter", 0.82);
+  },
+  activate(){
+    this.playKey("activate", 0.68);
+  }
+};
+
+function value(id){ return SETTINGS[id]; }
+function applyLayoutSettings(){
+  samurai.style.width = value("scale") + "%";
+  samurai.style.bottom = value("feet") + "px";
+}
+applyLayoutSettings();
+
+
+function setStatus(s){ statusEl.textContent = s; }
+function setHP(){
+  $("playerHP").style.width = Math.max(0,playerHP)+"%";
+  $("enemyHP").style.width = Math.max(0,enemyHP)+"%";
+}
+setHP();
+
+function clearTimers(){
+  timers.forEach(clearTimeout); timers = [];
+}
+function wait(ms, myToken=token){
+  return new Promise((resolve,reject)=>{
+    const t = setTimeout(()=>{
+      timers = timers.filter(x=>x!==t);
+      if (myToken !== token) reject(new Error("aborted"));
+      else resolve();
+    }, ms);
+    timers.push(t);
+  });
+}
+function flash(kind, ms=90){
+  flashEl.className = kind;
+  setTimeout(()=>{ if (flashEl.className === kind) flashEl.className = ""; }, ms);
+}
+function shake(intensity=5, duration=180){
+  const start = performance.now();
+  function tick(){
+    const e = performance.now()-start;
+    if (e>=duration){ game.style.transform=""; return; }
+    const d = 1-e/duration;
+    game.style.transform = `translate(${(Math.random()-.5)*intensity*d}px,${(Math.random()-.5)*intensity*d}px)`;
+    requestAnimationFrame(tick);
+  }
+  tick();
+}
+function speedMs(base, slider="attackSpeed"){
+  // Higher slider value = shorter frame duration = higher FPS.
+  return Math.max(8, Math.round(base * 100 / value(slider)));
+}
+function setFrame(src, kind=null, idx=null){
+  samurai.style.backgroundImage = `url("${src}")`;
+  if (kind !== null) currentFrameKind = kind;
+  if (idx !== null) currentFrameIndex = idx;
+}
+async function play(kind, opts={}){
+  const arr = F[kind];
+  const from = opts.from ?? 0;
+  const to = opts.to ?? arr.length-1;
+  const step = from <= to ? 1 : -1;
+  const ms = opts.ms ?? speedMs(26);
+  const myToken = token;
+  for (let i=from; step>0 ? i<=to : i>=to; i+=step){
+    if (myToken !== token) throw new Error("aborted");
+    setFrame(arr[i], kind, i);
+    if (opts.onFrame) opts.onFrame(i, arr.length);
+    await wait(ms, myToken);
+  }
+}
+async function hold(ms){
+  await wait(ms, token);
+}
+function readyPose(){
+  state = State.ready;
+  setFrame(F.recover[F.recover.length-1] || F.enter[F.enter.length-1], "recover", F.recover.length-1);
+  setStatus("READY");
+  applyLayoutSettings();
+}
+
+function chooseChainCount(){
+  let min = value("chainMin"), max = value("chainMax");
+  if (max < min) [min,max] = [max,min];
+  return Math.floor(min + Math.random()*(max-min+1));
+}
+
+async function startFight(){
+  samurai.style.opacity = "1";
+  samurai.style.transition = "";
+  samurai.style.filter = "none";
+  GameAudio.init();
+  GameAudio.playMusic();
+  $("overlay").classList.add("hidden");
+  clearTimers(); token++; running = true; paused = false;
+  playerHP = 100; enemyHP = 100; counterHits = 0; setHP();
+  setStatus("ENTERING");
+  await entrance(token).catch(()=>{});
+  if (state !== State.lost && state !== State.won) {
+    sideAttacksRemaining = chooseChainCount();
+    nextExchange();
+  }
+}
+
+async function entrance(myToken){
+  state = State.entering;
+  samurai.style.width = value("scale") + "%";
+  const finalBottom = value("feet");
+  const travel = value("travel");
+  const startBottom = finalBottom + travel;
+  const total = F.enter.length;
+  const ms = speedMs(34, "enterSpeed");
+  const activateFrame = Math.max(0, Math.min(total - 1, Math.floor(total * 0.62)));
+  let activationPlayed = false;
+  for (let i=0;i<total;i++){
+    if (myToken !== token) throw new Error("aborted");
+    const t = total <= 1 ? 1 : i/(total-1);
+    samurai.style.bottom = (startBottom + (finalBottom-startBottom)*t) + "px";
+    setFrame(F.enter[i], "enter", i);
+    if (!activationPlayed && i >= activateFrame) {
+      activationPlayed = true;
+      GameAudio.activate();
+    }
+    await wait(ms, myToken);
+  }
+  samurai.style.bottom = finalBottom + "px";
+  readyPose();
+  await wait(350, myToken);
+}
+
+function nextExchange(){
+  if (!running || paused || state===State.won || state===State.lost) return;
+  token++;
+  const myToken = token;
+  clearTimers();
+  if (enemyHP <= 0) return win();
+  if (playerHP <= 0) return lose();
+  if (sideAttacksRemaining <= 0){
+    sideAttacksRemaining = chooseChainCount();
+    overheadExchange(myToken).catch(()=>{});
+  } else {
+    sideAttacksRemaining--;
+    const kind = Math.random() < .5 ? "left" : "right";
+    sideExchange(kind, myToken).catch(()=>{});
+  }
+}
+
+
+async function reverseAttackToReady(kind, fromIdx, myToken, opts={}){
+  // Side attacks currently do NOT have side-specific blocked/recoil clips.
+  // So after a side parry or side-hit resolution, never play the generic recover/off-balance clip.
+  // Instead, rewind the same side attack frames back into the ready pose.
+  const arr = F[kind];
+  const capRatio = kind === "center" ? .74 : .74;
+  const capped = Math.max(0, Math.min(fromIdx ?? Math.floor(arr.length * .55), Math.floor(arr.length * capRatio)));
+  const ms = opts.ms ?? speedMs(18);
+  for (let i=capped; i>=0; i--){
+    if (myToken !== token) throw new Error("aborted");
+    setFrame(arr[i], kind, i);
+    await wait(ms, myToken);
+  }
+  readyPose();
+}
+
+async function reverseSideToReady(kind, fromIdx, myToken, opts={}){
+  return reverseAttackToReady(kind, fromIdx, myToken, opts);
+}
+
+async function sideTelegraphLeadIn(kind, arr, parryOpenAt, myToken){
+  // Restored closer to the prior combat-animation behavior:
+  // play the natural early attack frames in order, then hold a small backswing beat.
+  // Targeted slowdowns are handled by frameDurationForAttack().
+  const windupEnd = Math.max(2, parryOpenAt - 1);
+  for (let i=0; i<=windupEnd; i++){
+    if (myToken !== token) throw new Error("aborted");
+    setFrame(arr[i], kind, i);
+    await wait(frameDurationForAttack(kind, i), myToken);
+  }
+
+  const a = windupEnd;
+  const b = Math.max(0, windupEnd - 1);
+  for (let h=0; h<3; h++){
+    if (myToken !== token) throw new Error("aborted");
+    const idx = h % 2 ? b : a;
+    setFrame(arr[idx], kind, idx);
+    await wait(frameDurationForAttack(kind, idx), myToken);
+  }
+}
+
+function frameDurationForAttack(kind, idx){
+  // idx is zero-based; frameNo matches the filename-style frame number.
+  const frameNo = idx + 1;
+  let base = 20;
+
+  // Slow the visual read only at the requested backswing / commitment bands.
+  if (kind === "right" && frameNo >= 6 && frameNo <= 9) base = 54;
+  else if (kind === "left" && frameNo >= 15 && frameNo <= 18) base = 54;
+  else if (kind === "center" && frameNo >= 15 && frameNo <= 18) base = 42;
+
+  return speedMs(base);
+}
+
+function cumulativeAttackMs(kind, fromIdx, toIdx){
+  let total = 0;
+  for (let i = fromIdx; i <= toIdx; i++) total += frameDurationForAttack(kind, i);
+  return total;
+}
+
+function parryOpenFrameFromHit(kind, firstStrikeFrame, hitFrame, desiredWindowMs){
+  // The parry window now works backward from the actual hit/commit frame:
+  // hitFrame - desiredWindowMs = first frame where blocking becomes legal.
+  // This prevents "too early" swings from counting.
+  let backMs = 0;
+  for (let i = hitFrame; i >= firstStrikeFrame; i--){
+    backMs += frameDurationForAttack(kind, i);
+    if (backMs >= desiredWindowMs) return Math.max(firstStrikeFrame, i);
+  }
+  return firstStrikeFrame;
+}
+
+function commitMiss(myToken){
+  if (state === State.parry && token === myToken) {
+    state = State.committed;
+    setStatus("MISSED BLOCK");
+    flash("red", 70);
+  }
+}
+
+
+
+async function sideExchange(kind, myToken){
+  currentAttackKind = kind;
+  requiredParry = kind; // swipe left for left attack, right for right attack
+  state = State.attacking;
+  setStatus(`SAMURAI ${kind.toUpperCase()} ATTACK`);
+  GameAudio.attack(kind);
+  const arr = F[kind];
+  const timing = SIDE_TIMING[kind];
+
+  const parryOpenAt = timing.parryOpenAt;
+  const parryCloseAt = timing.parryCloseAt;
+  const hitFrame = timing.hitFrame;
+  const usedEnd = Math.max(timing.usedEnd, hitFrame);
+
+  for (let i=0; i<=usedEnd && i<arr.length; i++){
+    if (myToken !== token) throw new Error("aborted");
+    setFrame(arr[i], kind, i);
+
+    if (i === parryOpenAt) {
+      state = State.parry;
+      setStatus(`PARRY ${kind.toUpperCase()}`);
+      tryActiveTouchParry();
+    }
+
+    await wait(frameDurationForAttack(kind, i), myToken);
+
+    // Close after the last legal CSV-marked block frame has displayed.
+    if (i === parryCloseAt && state === State.parry) {
+      commitMiss(myToken);
+    }
+
+    if (state === State.resetting) return;
+    if (state === State.committed && i >= hitFrame) break;
+  }
+
+  if (state === State.parry) state = State.committed;
+  if (state === State.committed || state === State.attacking) {
+    takeDamage(14);
+    state = State.resetting;
+    await wait(120, myToken).catch(()=>{});
+    await reverseAttackToReady(kind, Math.min(hitFrame, arr.length-1), myToken, {ms:speedMs(16)});
+    scheduleNext(280);
+  }
+}
+
+async function overheadExchange(myToken){
+  currentAttackKind = "center";
+  requiredParry = "up";
+  state = State.attacking;
+  setStatus("OVERHEAD STRIKE");
+  GameAudio.attack("center");
+  const arr = F.center;
+
+  // Center timing now uses the user-approved timing table.
+  // 1-based frames:
+  //   downstrike starts: 22
+  //   block legal: 21–24
+  //   impact / hit: 23
+  const downstrikeStart = 21;
+  const parryOpenAt = 20;
+  const parryCloseAt = 23;
+  const hitFrame = 22;
+
+  for (let i=0;i<arr.length;i++){
+    if (myToken !== token) throw new Error("aborted");
+    setFrame(arr[i], "center", i);
+
+    if (i === downstrikeStart) {
+      // Kept as a named moment for debugging/timing review.
+    }
+
+    if (i === parryOpenAt) {
+      state = State.parry;
+      setStatus("PARRY UP");
+      tryActiveTouchParry();
+    }
+
+    await wait(frameDurationForAttack("center", i), myToken);
+
+    // Close AFTER the last legal block frame has displayed.
+    // This makes frames 21–24 legal by default.
+    if (i === parryCloseAt && state === State.parry) {
+      commitMiss(myToken);
+    }
+
+    if (state === State.committed && i >= hitFrame) break;
+    if (state === State.counter || state === State.resetting) return;
+  }
+
+  if (state === State.parry) state = State.committed;
+  if (state === State.committed || state === State.attacking) {
+    takeDamage(24);
+    state = State.resetting;
+    await wait(120, myToken).catch(()=>{});
+    // Successful center hit should not use the blocked/recoil recover clip.
+    await reverseAttackToReady("center", hitFrame, myToken, {ms:speedMs(16)}).catch(()=>{});
+    scheduleNext(650);
+  }
+}
+
+async function onParrySuccess(){
+  if (state !== State.parry) return;
+  clearTimers();
+  const myToken = ++token;
+  GameAudio.block(currentAttackKind === "center" ? "center" : currentAttackKind);
+  flash("cyan", 80); shake(7, 160); bladeClashFlash(.50, .43);
+  if (currentAttackKind === "center") {
+    state = State.counter;
+    setStatus("COUNTER WINDOW");
+    counterHits = 0;
+
+    // The counter window starts immediately on successful block. That keeps the
+    // exposed/open period honest instead of adding the full blocked animation on top.
+    timers.push(setTimeout(()=>{
+      if (state === State.counter && token === myToken) closeCounter(myToken);
+    }, value("counterWindow")));
+
+    // Slightly slower blocked animation for readability, without extending the actual counter timer.
+    await play("blocked", {ms:speedMs(32), from:0, to:F.blocked.length-1}).catch(()=>{});
+  } else {
+    state = State.resetting;
+    setStatus("PARRIED — RESET");
+    // No side blocked sprites: reverse the current side attack back to ready, no off-balance recover frames.
+    await reverseSideToReady(currentAttackKind, currentFrameIndex, myToken, {ms:speedMs(16)}).catch(()=>{});
+    scheduleNext(280);
+  }
+}
+
+async function closeCounter(myToken){
+  if (token !== myToken || state !== State.counter) return;
+  state = State.resetting;
+  setStatus("WINDOW CLOSED");
+  await resetToReady(myToken, 350).catch(()=>{});
+  scheduleNext(500);
+}
+
+async function resetToReady(myToken, pauseMs=250){
+  state = State.resetting;
+  await wait(pauseMs, myToken).catch(()=>{});
+  if (myToken !== token) throw new Error("aborted");
+  await play("recover", {ms:speedMs(26), from:0, to:F.recover.length-1}).catch(()=>{});
+  readyPose();
+}
+function variedAttackDelay(baseMs){
+  // Vary cadence so the samurai does not feel metronomic:
+  // some quick chained attacks, some normal beats, and some ominous pauses.
+  const roll = Math.random();
+  let mult;
+  if (roll < 0.22) mult = 0.38;       // very fast follow-up
+  else if (roll < 0.42) mult = 0.65;  // quick
+  else if (roll < 0.72) mult = 1.0;   // normal
+  else if (roll < 0.90) mult = 1.45;  // pause
+  else mult = 2.15;                   // long pause
+  return Math.max(120, Math.min(1500, Math.round(baseMs * mult)));
+}
+
+function scheduleNext(ms){
+  timers.push(setTimeout(()=>nextExchange(), variedAttackDelay(ms)));
+}
+
+function takeDamage(amount){
+  playerHP = Math.max(0, playerHP - amount);
+  setHP(); flash("hitred",220); shake(12,280);
+  setStatus(`HIT — INTEGRITY ${playerHP}%`);
+  if (playerHP <= 0) lose();
+}
+
+async function counterAttack(dir){
+  if (state !== State.counter) return;
+  // Any swipe direction counts as a valid counterattack in this mobile tuning pass.
+  counterHits++;
+  GameAudio.counter();
+  enemyHP = Math.max(0, enemyHP - COUNTER_DAMAGE);
+  setHP(); bladeClashFlash(.50, .46); flash("white",55); shake(5,120);
+  setStatus(`COUNTER ${counterHits} / ${COUNTER_HITS_TO_KILL}`);
+  if (enemyHP <= 0) return win();
+}
+
+function win(){
+  state = State.won; running=false; clearTimers(); GameAudio.stopMusic(); flash("cyan", 200);
+  setStatus("SAMURAI NEUTRALIZED");
+  samurai.style.transition = "opacity 900ms ease, filter 900ms ease";
+  samurai.style.filter = "brightness(1.8) saturate(1.4)";
+  samurai.style.opacity = "0";
+  setTimeout(()=>{
+    $("overlay").classList.remove("hidden");
+    $("overlay").querySelector("h1").textContent = "ALIGNED";
+    $("overlay").querySelector("p").innerHTML = "SAMURAI TEST COMPLETE<br>Gesture loop operational.";
+    $("startBtn").textContent = "RESTART";
+  }, 700);
+}
+function lose(){
+  state = State.lost; running=false; clearTimers(); GameAudio.stopMusic(); flash("red", 220);
+  setStatus("COMPROMISED");
+  $("overlay").classList.remove("hidden");
+  $("overlay").querySelector("h1").textContent = "COMPROMISED";
+  $("overlay").querySelector("p").innerHTML = "INTEGRITY ZERO<br>Redeploy required.";
+  $("startBtn").textContent = "RETRY";
+}
+
+function swipeAngleDeg(dx, dy){
+  // Browser coordinates: right=0, down=90, left=180/-180, up=-90.
+  return Math.atan2(dy, dx) * 180 / Math.PI;
+}
+
+function angleDiffDeg(a, b){
+  const raw = Math.abs(a - b) % 360;
+  return raw > 180 ? 360 - raw : raw;
+}
+
+function directionTargetDeg(dir){
+  if (dir === "right") return 0;
+  if (dir === "down") return 90;
+  if (dir === "left") return 180;
+  if (dir === "up") return -90;
+  return null;
+}
+
+function gestureMatchesDirection(dx, dy, requiredDir, toleranceDeg=45){
+  const target = directionTargetDeg(requiredDir);
+  if (target === null) return false;
+
+  // Center blocks were feeling unreliable on touch because an upward swipe often
+  // finishes after the very short legal window. Make "up" deliberately generous:
+  // any clearly upward swipe inside a 60-degree cone counts.
+  const angle = swipeAngleDeg(dx, dy);
+  const tolerance = requiredDir === "up" ? 60 : toleranceDeg;
+  return angleDiffDeg(angle, target) <= tolerance;
+}
+
+function classify(dx, dy){
+  // Used for counterattacks / display fallback.
+  const angle = swipeAngleDeg(dx, dy);
+  const candidates = ["right", "down", "left", "up"];
+  let best = "right", bestDiff = Infinity;
+  for (const c of candidates) {
+    const diff = angleDiffDeg(angle, directionTargetDeg(c));
+    if (diff < bestDiff) { bestDiff = diff; best = c; }
+  }
+  return best;
+}
+
+function tryParryFromVector(dx, dy, dist){
+  if (parryConsumedThisTouch || state !== State.parry || dist < 14) return false;
+  if (gestureMatchesDirection(dx, dy, requiredParry, 45)) {
+    parryConsumedThisTouch = true;
+    onParrySuccess();
+    return true;
+  }
+  return false;
+}
+
+function tryActiveTouchParry(){
+  if (!pointer || path.length < 2 || state !== State.parry || parryConsumedThisTouch) return false;
+  const last = path[path.length - 1];
+  const dx = last.x - pointer.x;
+  const dy = last.y - pointer.y;
+  return tryParryFromVector(dx, dy, Math.hypot(dx, dy));
+}
+
+function handleGesture(dir, dist, dx=0, dy=0){
+  // Counterattacks should be easy: any tap or swipe during the counter window lands.
+  // This must happen BEFORE the distance threshold, otherwise taps never score.
+  if (state === State.counter) {
+    counterAttack(dir || "tap");
+    return;
+  }
+
+  if (dist < 18) return;
+
+  if (state === State.parry) {
+    if (!tryParryFromVector(dx, dy, dist)) {
+      setStatus("WRONG PARRY");
+      flash("red",80);
+    }
+  }
+}
+
+game.addEventListener("pointerdown", e=>{
+  if (e.target.closest("button,input,label")) return;
+  e.preventDefault();
+  pointer = {x:e.clientX, y:e.clientY, t:performance.now()};
+  path = [{x:e.clientX,y:e.clientY}];
+  parryConsumedThisTouch = false;
+  counterConsumedThisTouch = false;
+  if (state === State.counter) {
+    counterConsumedThisTouch = true;
+    counterAttack("tap");
+  }
+});
+game.addEventListener("pointermove", e=>{
+  if (!pointer) return;
+  e.preventDefault(); path.push({x:e.clientX,y:e.clientY}); drawTrail(); tryActiveTouchParry();
+});
+game.addEventListener("pointerup", e=>{
+  if (!pointer) return;
+  e.preventDefault();
+  const sx = pointer.x, sy = pointer.y;
+  const dx=e.clientX-sx, dy=e.clientY-sy, dist=Math.hypot(dx,dy);
+  if (dist >= 18) addSwipeStroke(sx, sy, e.clientX, e.clientY);
+  pointer=null; path=[];
+  if (!parryConsumedThisTouch && !counterConsumedThisTouch) handleGesture(classify(dx,dy), dist, dx, dy);
+});
+window.addEventListener("keydown", e=>{
+  if (e.key==="ArrowLeft") handleGesture("left",60,-60,0);
+  if (e.key==="ArrowRight") handleGesture("right",60,60,0);
+  if (e.key==="ArrowUp") handleGesture("up",60,0,-60);
+  if (e.key==="ArrowDown") handleGesture("down",60,0,60);
+  if (e.key===" ") counterAttack("down");
+});
+
+function resizeCanvases(){
+  const r=game.getBoundingClientRect(), dpr=window.devicePixelRatio||1;
+  for (const c of [trail,burst]){
+    c.width=Math.round(r.width*dpr); c.height=Math.round(r.height*dpr);
+    c.style.width=r.width+"px"; c.style.height=r.height+"px";
+    const ctx=c.getContext("2d"); ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+}
+window.addEventListener("resize", resizeCanvases); resizeCanvases();
+
+function drawTrail(){
+  trailCtx.clearRect(0,0,trail.width,trail.height);
+
+  // Draw finished player strokes that linger briefly, like the original Alignment game,
+  // but as cleaner straight blue/white energy blades.
+  const now = performance.now();
+  swipeStrokes = swipeStrokes.filter(s => now - s.t < s.life);
+  for (const s of swipeStrokes) {
+    const age = now - s.t;
+    const alpha = Math.max(0, 1 - age / s.life);
+    drawEnergyBlade(trailCtx, s.x1, s.y1, s.x2, s.y2, {
+      core: "rgba(255,255,255,1)",
+      inner: "rgba(185,245,255,.95)",
+      outer: "rgba(0,170,255,.85)",
+      alpha: alpha * .92,
+      coreWidth: 4,
+      innerWidth: 9,
+      outerWidth: 22
+    });
+  }
+
+  // While the finger/mouse is down, show a live straight-line preview from start to current point.
+  if (pointer && path.length >= 2) {
+    const rect = game.getBoundingClientRect();
+    const a = path[0];
+    const b = path[path.length - 1];
+    drawEnergyBlade(trailCtx, a.x - rect.left, a.y - rect.top, b.x - rect.left, b.y - rect.top, {
+      core: "rgba(255,255,255,1)",
+      inner: "rgba(185,245,255,.98)",
+      outer: "rgba(0,170,255,.9)",
+      alpha: 1,
+      coreWidth: 4,
+      innerWidth: 9,
+      outerWidth: 24
+    });
+  }
+
+  if (pointer || swipeStrokes.length > 0) requestAnimationFrame(drawTrail);
+}
+
+function addSwipeStroke(x1, y1, x2, y2){
+  const rect = game.getBoundingClientRect();
+  swipeStrokes.push({
+    x1: x1 - rect.left,
+    y1: y1 - rect.top,
+    x2: x2 - rect.left,
+    y2: y2 - rect.top,
+    t: performance.now(),
+    life: 260
+  });
+  drawTrail();
+}
+
+function drawEnergyBlade(ctx, x1, y1, x2, y2, opt={}){
+  const core = opt.core || "rgba(255,255,255,1)";
+  const inner = opt.inner || "rgba(190,245,255,.95)";
+  const outer = opt.outer || "rgba(0,170,255,.8)";
+  const alpha = opt.alpha ?? 1;
+  const coreWidth = opt.coreWidth ?? 4;
+  const innerWidth = opt.innerWidth ?? 9;
+  const outerWidth = opt.outerWidth ?? 22;
+
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.globalAlpha = alpha;
+
+  // Broad blue aura.
+  ctx.shadowColor = outer;
+  ctx.shadowBlur = 26;
+  ctx.strokeStyle = outer;
+  ctx.lineWidth = outerWidth;
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.stroke();
+
+  // Medium cyan tube.
+  ctx.shadowColor = inner;
+  ctx.shadowBlur = 16;
+  ctx.strokeStyle = inner;
+  ctx.lineWidth = innerWidth;
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.stroke();
+
+  // White-hot core.
+  ctx.globalCompositeOperation = "source-over";
+  ctx.shadowColor = "rgba(255,255,255,.95)";
+  ctx.shadowBlur = 8;
+  ctx.strokeStyle = core;
+  ctx.lineWidth = coreWidth;
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+function bladeClashFlash(nx=.5, ny=.44){
+  // Small white impact flash near blade contact. This replaces the old dot/spark cluster.
+  const rect = game.getBoundingClientRect();
+  const x = rect.width * nx, y = rect.height * ny;
+  const start = performance.now();
+  const duration = 130;
+
+  function tick(now){
+    const t = Math.min(1, (now - start) / duration);
+    const alpha = 1 - t;
+    const r = 7 + t * 18;
+
+    burstCtx.clearRect(0,0,burst.width,burst.height);
+    burstCtx.save();
+    burstCtx.globalCompositeOperation = "lighter";
+
+    const g = burstCtx.createRadialGradient(x, y, 0, x, y, r * 2.4);
+    g.addColorStop(0, `rgba(255,255,255,${0.95 * alpha})`);
+    g.addColorStop(0.28, `rgba(210,245,255,${0.70 * alpha})`);
+    g.addColorStop(0.55, `rgba(0,185,255,${0.38 * alpha})`);
+    g.addColorStop(1, "rgba(0,185,255,0)");
+
+    burstCtx.fillStyle = g;
+    burstCtx.beginPath();
+    burstCtx.arc(x, y, r * 2.4, 0, Math.PI * 2);
+    burstCtx.fill();
+
+    // Tiny crossing flare, not particles.
+    burstCtx.strokeStyle = `rgba(255,255,255,${0.90 * alpha})`;
+    burstCtx.lineWidth = 2;
+    burstCtx.shadowColor = "white";
+    burstCtx.shadowBlur = 12;
+    burstCtx.beginPath();
+    burstCtx.moveTo(x-r, y);
+    burstCtx.lineTo(x+r, y);
+    burstCtx.moveTo(x, y-r);
+    burstCtx.lineTo(x, y+r);
+    burstCtx.stroke();
+
+    burstCtx.restore();
+
+    if (t < 1) requestAnimationFrame(tick);
+    else burstCtx.clearRect(0,0,burst.width,burst.height);
+  }
+  requestAnimationFrame(tick);
+}
+
+// Legacy compatibility: keep emitBurst available, but route it to a clean flash.
+function emitBurst(nx, ny, color, count){
+  bladeClashFlash(nx, ny);
+}
+
+$("startBtn").onclick = startFight;
+$("startBtn").addEventListener("touchend", (e)=>{ e.preventDefault(); startFight(); }, {passive:false});
+
+
+function preload(){
+  const pre=document.createElement("div"); pre.style.cssText="position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden";
+  document.body.appendChild(pre);
+  Object.values(F).flat().forEach(src=>{
+    const img=new Image(); img.src=src; pre.appendChild(img);
+    img.onerror=()=>console.warn("Missing asset:",src);
+  });
+}
+preload();
+readyPose();
+</script>
+</body>
+</html>
